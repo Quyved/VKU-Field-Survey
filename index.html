@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0284c7" />
+    <meta name="description" content="Ứng dụng khảo sát cơ sở vật chất VKU hoạt động ngoại tuyến." />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="stylesheet" href="styles.css" />
+    <title>VKU Field Survey</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand"><span class="brand-mark">V</span><div><strong>VKU Field Survey</strong><small>Khảo sát cơ sở vật chất</small></div></div>
+        <div id="networkStatus" class="status online"><span></span> Trực tuyến</div>
+      </header>
+
+      <section class="hero">
+        <div><p class="eyebrow">OFFLINE-FIRST PWA</p><h1>Ghi nhận hiện trạng, ở bất kỳ đâu.</h1><p>Dữ liệu được lưu an toàn trên thiết bị và tự đồng bộ khi có mạng.</p></div>
+        <div class="sync-card"><span class="sync-icon">↻</span><div><strong id="pendingCount">0</strong><small>phiếu chờ đồng bộ</small></div><button id="syncButton" class="secondary">Đồng bộ ngay</button></div>
+      </section>
+
+      <nav class="tabs" aria-label="Điều hướng">
+        <button class="tab active" data-view="form">Tạo khảo sát</button>
+        <button class="tab" data-view="records">Danh sách <span id="recordBadge">0</span></button>
+      </nav>
+
+      <section id="formView" class="view">
+        <form id="surveyForm">
+          <div class="form-head"><div><h2>Phiếu khảo sát mới</h2><p>Điền thông tin hiện trạng thiết bị/phòng học.</p></div><button type="button" id="clearDraft" class="text-button">Xóa bản nháp</button></div>
+          <div class="grid">
+            <label>Tòa nhà<input required name="building" placeholder="Ví dụ: Khu A" /></label>
+            <label>Tầng<input required name="floor" type="number" min="0" placeholder="Ví dụ: 3" /></label>
+            <label>Phòng<input required name="room" placeholder="Ví dụ: A.301" /></label>
+            <label>Hạng mục<select required name="category"><option value="">Chọn hạng mục</option><option>Phần cứng</option><option>Máy chiếu</option><option>Điều hòa</option><option>Điện</option><option>Nội thất</option></select></label>
+          </div>
+          <fieldset><legend>Đánh giá tình trạng</legend><div class="ratings" id="ratings"><button type="button" data-rating="1">1</button><button type="button" data-rating="2">2</button><button type="button" data-rating="3">3</button><button type="button" data-rating="4">4</button><button type="button" data-rating="5">5</button></div><small id="ratingHint">Chọn từ 1 (rất kém) đến 5 (rất tốt)</small></fieldset>
+          <label>Ghi chú lỗi/hiện trạng<textarea required name="notes" rows="5" placeholder="Mô tả chi tiết lỗi, vị trí và đề xuất xử lý..."></textarea></label>
+          <div class="evidence"><div><strong>Ảnh minh chứng</strong><small>Chụp ảnh hoặc chọn từ thư viện</small></div><label class="camera"><input id="photoInput" type="file" accept="image/*" capture="environment" /><span>📷 Thêm ảnh</span></label></div>
+          <img id="photoPreview" class="photo-preview hidden" alt="Ảnh minh chứng đã chọn" />
+          <div class="actions"><button type="submit" class="primary">Lưu phiếu khảo sát</button><span id="draftState">Tự động lưu bản nháp</span></div>
+        </form>
+      </section>
+
+      <section id="recordsView" class="view hidden"><div class="records-head"><div><h2>Phiếu đã ghi nhận</h2><p>Thông tin lưu trên thiết bị của bạn.</p></div><button id="exportButton" class="secondary">Xuất JSON</button></div><div id="recordsList" class="records-list"></div></section>
+    </main>
+    <div id="toast" class="toast" role="status"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
