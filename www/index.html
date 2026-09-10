@@ -17,8 +17,19 @@
       </header>
 
       <section class="hero">
-        <div><p class="eyebrow">OFFLINE-FIRST PWA</p><h1>Ghi nhận hiện trạng, ở bất kỳ đâu.</h1><p>Dữ liệu được lưu an toàn trên thiết bị và tự đồng bộ khi có mạng.</p></div>
-        <div class="sync-card"><span class="sync-icon">↻</span><div><strong id="pendingCount">0</strong><small>phiếu chờ đồng bộ</small></div><button id="syncButton" class="secondary">Đồng bộ ngay</button></div>
+        <div>
+          <p class="eyebrow">OFFLINE-FIRST PWA</p>
+          <h1>Ghi nhận hiện trạng, ở bất kỳ đâu.</h1>
+          <p>Dữ liệu được lưu an toàn trên thiết bị và tự đồng bộ khi có mạng.</p>
+        </div>
+        <div class="sync-card">
+          <span class="sync-icon">↻</span>
+          <div><strong id="pendingCount">0</strong><small>phiếu chờ đồng bộ</small></div>
+          <div class="hero-actions">
+            <button id="syncButton" class="secondary">Đồng bộ ngay</button>
+            <button id="showQrBtn" class="qr-btn" title="Mở mã QR kết nối điện thoại">📱 Kết nối điện thoại</button>
+          </div>
+        </div>
       </section>
 
       <nav class="tabs" aria-label="Điều hướng">
@@ -43,7 +54,35 @@
         </form>
       </section>
 
-      <section id="recordsView" class="view hidden"><div class="records-head"><div><h2>Phiếu đã ghi nhận</h2><p>Thông tin lưu trên thiết bị của bạn.</p></div><button id="exportButton" class="secondary">Xuất JSON</button></div><div id="recordsList" class="records-list"></div></section>
+      <section id="recordsView" class="view hidden">
+        <div class="records-head">
+          <div><h2>Phiếu đã ghi nhận</h2><p>Thông tin lưu trên thiết bị của bạn.</p></div>
+          <div class="json-actions">
+            <button id="importButton" class="secondary">Nhập JSON</button>
+            <input type="file" id="importInput" accept=".json" class="hidden" />
+            <button id="exportButton" class="secondary">Xuất JSON</button>
+          </div>
+        </div>
+        <div id="recordsList" class="records-list"></div>
+      </section>
+
+      <dialog id="qrModal" class="qr-modal">
+        <div class="qr-box">
+          <div class="qr-head">
+            <h3>📱 Kết nối với Điện thoại</h3>
+            <button id="closeQrBtn" class="close-btn" type="button">&times;</button>
+          </div>
+          <p>Dùng điện thoại (cùng mạng Wi-Fi với máy tính) quét mã bên dưới để truy cập ứng dụng:</p>
+          <div class="qr-container">
+            <img id="qrImage" alt="Mã QR kết nối" class="qr-img" />
+          </div>
+          <div class="lan-url-box">
+            <span>Địa chỉ LAN:</span>
+            <a id="lanUrlLink" href="#" target="_blank" rel="noopener"><strong id="lanUrlText">Đang lấy IP...</strong></a>
+          </div>
+          <p class="qr-tip">💡 Tất cả dữ liệu khảo sát tạo trên điện thoại sẽ được tự động đồng bộ về Server máy tính khi ấn <strong>"Đồng bộ ngay"</strong>.</p>
+        </div>
+      </dialog>
     </main>
     <div id="toast" class="toast" role="status"></div>
     <script src="app.js"></script>

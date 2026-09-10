@@ -1,0 +1,18 @@
+# Node dependencies
+node_modules/
+.npm-cache/
+
+# Gradle & Build caches
+.gradle-cache/
+.gradle/
+build/
+android/.gradle/
+android/app/build/
+android/build/
+android/.idea/
+
+# Local data & environment
+data/
+*.log
+.DS_Store
+Thumbs.db
