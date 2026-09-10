@@ -104,16 +104,17 @@ function esc(value){
   return e.innerHTML;
 }
 
-async function sync(){
-  if(!isOnline()) return notify('Chưa có kết nối mạng. Phiếu vẫn được lưu an toàn.');
+let isSyncing = false;
+async function sync(silent = false){
+  if(!isOnline() || isSyncing) return;
+  isSyncing = true;
   const localSurveys = await entries();
   const waiting = localSurveys.filter(x => x.status === 'PENDING_SYNC');
   
-  $('#syncButton').textContent = 'Đang đồng bộ…';
+  if (!silent) $('#syncButton').textContent = 'Đang đồng bộ…';
 
   let cloudSurveys = null;
 
-  // 1. Gửi lên Cloudflare / Local API /api/surveys/sync
   try {
     const response = await fetch('/api/surveys/sync', {
       method: 'POST',
@@ -131,7 +132,6 @@ async function sync(){
     console.warn('API /api/surveys/sync không phản hồi:', err);
   }
 
-  // 2. Tự động chuyển sang Direct Cloud Storage nếu chạy trên trang web tĩnh
   if (!cloudSurveys) {
     try {
       const res = await fetch(CLOUD_FALLBACK_URL);
@@ -151,11 +151,13 @@ async function sync(){
       const merged = Array.from(map.values());
       merged.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
-      await fetch(CLOUD_FALLBACK_URL, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'VKU Field Surveys', data: { surveys: merged } })
-      });
+      if (waiting.length > 0 || merged.length !== existingRemote.length) {
+        await fetch(CLOUD_FALLBACK_URL, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'VKU Field Surveys', data: { surveys: merged } })
+        });
+      }
 
       cloudSurveys = merged;
     } catch (e) {
@@ -167,13 +169,14 @@ async function sync(){
     await saveEntries(cloudSurveys);
     await render();
     $('#syncButton').textContent = 'Đồng bộ ngay';
-    notify(`Đã đồng bộ thành công! (${cloudSurveys.length} phiếu trên Cloud)`);
+    if (!silent) notify(`Đã đồng bộ thành công! (${cloudSurveys.length} phiếu trên Cloud)`);
+    isSyncing = false;
     return;
   }
 
-  // 3. Giả lập ngoại tuyến nếu không kết nối được server nào
   if (!waiting.length) {
     $('#syncButton').textContent = 'Đồng bộ ngay';
+    isSyncing = false;
     return;
   }
   await new Promise(r => setTimeout(r, 650));
@@ -181,7 +184,8 @@ async function sync(){
   await saveEntries(localSurveys);
   await render();
   $('#syncButton').textContent = 'Đồng bộ ngay';
-  notify(`Đã đồng bộ cục bộ ${waiting.length} phiếu.`);
+  if (!silent) notify(`Đã đồng bộ cục bộ ${waiting.length} phiếu.`);
+  isSyncing = false;
 }
 
 function initQrModal(){
@@ -260,7 +264,7 @@ $('#clearDraft').addEventListener('click',async()=>{
   notify('Đã xóa bản nháp.');
 });
 
-$('#syncButton').addEventListener('click',sync);
+$('#syncButton').addEventListener('click',()=>sync(false));
 
 $('#exportButton').addEventListener('click',async()=>{
   const blob=new Blob([JSON.stringify(await entries(),null,2)],{type:'application/json'});
@@ -316,3 +320,10 @@ loadDraft();
 render();
 updateStatus();
 initQrModal();
+
+// Tự động kiểm tra và đồng bộ thời gian thực mỗi 4 giây
+setInterval(() => {
+  if (isOnline()) {
+    sync(true);
+  }
+}, 4000);
