@@ -1,7 +1,8 @@
 ext {
     minSdkVersion = 24
-    compileSdkVersion = 36
-    targetSdkVersion = 36
+    // SDK 37 is installed locally; using it avoids an on-demand SDK download at build time.
+    compileSdkVersion = 37
+    targetSdkVersion = 37
     androidxActivityVersion = '1.11.0'
     androidxAppCompatVersion = '1.7.1'
     androidxCoordinatorLayoutVersion = '1.3.0'
