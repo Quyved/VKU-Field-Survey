@@ -1,22 +1,54 @@
 // Cloudflare Pages Function cho GET /api/surveys và POST /api/surveys
+const CLOUD_SYNC_URL = 'https://api.restful-api.dev/objects/ff808181a067127101a08a5a4dda6221';
 
-export async function onRequestGet(context) {
+async function getCloudSurveys(context) {
   if (context.env && context.env.SURVEYS_KV) {
     try {
       const data = await context.env.SURVEYS_KV.get('surveys');
-      const surveys = data ? JSON.parse(data) : [];
-      return new Response(JSON.stringify({ success: true, surveys }), {
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'Access-Control-Allow-Origin': '*'
-        }
-      });
+      if (data) return JSON.parse(data);
     } catch (e) {
-      console.error('Lỗi KV:', e);
+      console.error('Lỗi Cloudflare KV:', e);
     }
   }
 
-  return new Response(JSON.stringify({ success: true, surveys: [] }), {
+  try {
+    const res = await fetch(CLOUD_SYNC_URL);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.data && Array.isArray(json.data.surveys)) {
+        return json.data.surveys;
+      }
+    }
+  } catch (e) {
+    console.warn('Lỗi đọc Cloud Sync:', e);
+  }
+
+  return [];
+}
+
+async function saveCloudSurveys(context, surveys) {
+  if (context.env && context.env.SURVEYS_KV) {
+    try {
+      await context.env.SURVEYS_KV.put('surveys', JSON.stringify(surveys));
+    } catch (e) {
+      console.error('Lỗi lưu Cloudflare KV:', e);
+    }
+  }
+
+  try {
+    await fetch(CLOUD_SYNC_URL, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'VKU Field Surveys', data: { surveys } })
+    });
+  } catch (e) {
+    console.warn('Lỗi ghi Cloud Sync:', e);
+  }
+}
+
+export async function onRequestGet(context) {
+  const surveys = await getCloudSurveys(context);
+  return new Response(JSON.stringify({ success: true, surveys }), {
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       'Access-Control-Allow-Origin': '*'
@@ -29,12 +61,7 @@ export async function onRequestPost(context) {
     const payload = await context.request.json();
     const incomingSurveys = Array.isArray(payload) ? payload : (payload.surveys || []);
 
-    let existingSurveys = [];
-    if (context.env && context.env.SURVEYS_KV) {
-      const data = await context.env.SURVEYS_KV.get('surveys');
-      if (data) existingSurveys = JSON.parse(data);
-    }
-
+    let existingSurveys = await getCloudSurveys(context);
     const existingMap = new Map(existingSurveys.map(item => [item.id, item]));
     let syncedCount = 0;
 
@@ -50,9 +77,7 @@ export async function onRequestPost(context) {
     const mergedSurveys = Array.from(existingMap.values());
     mergedSurveys.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
-    if (context.env && context.env.SURVEYS_KV) {
-      await context.env.SURVEYS_KV.put('surveys', JSON.stringify(mergedSurveys));
-    }
+    await saveCloudSurveys(context, mergedSurveys);
 
     return new Response(JSON.stringify({ success: true, syncedCount, surveys: mergedSurveys }), {
       headers: {

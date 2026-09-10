@@ -1,4 +1,5 @@
 const KEY='vku-surveys-v1', DRAFT='vku-draft-v1';
+const CLOUD_FALLBACK_URL = 'https://api.restful-api.dev/objects/ff808181a067127101a08a5a4dda6221';
 let rating=0, photoData='';
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
 const form=$('#surveyForm'), toast=$('#toast');
@@ -110,6 +111,9 @@ async function sync(){
   
   $('#syncButton').textContent = 'Đang đồng bộ…';
 
+  let cloudSurveys = null;
+
+  // 1. Gửi lên Cloudflare / Local API /api/surveys/sync
   try {
     const response = await fetch('/api/surveys/sync', {
       method: 'POST',
@@ -119,35 +123,55 @@ async function sync(){
     
     if (response.ok) {
       const resData = await response.json();
-      if (resData.success && Array.isArray(resData.surveys)) {
-        await saveEntries(resData.surveys);
-        await render();
-        $('#syncButton').textContent = 'Đồng bộ ngay';
-        notify(`Đã đồng bộ thành công với Cloud/Server! (${resData.syncedCount || waiting.length} phiếu mới)`);
-        return;
+      if (resData.success && Array.isArray(resData.surveys) && resData.surveys.length > 0) {
+        cloudSurveys = resData.surveys;
       }
     }
   } catch (err) {
-    console.warn('Không thể kết nối API đồng bộ:', err);
+    console.warn('API /api/surveys/sync không phản hồi:', err);
   }
 
-  try {
-    const res = await fetch('/api/surveys');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && Array.isArray(data.surveys) && data.surveys.length > 0) {
-        const existingMap = new Map(localSurveys.map(item => [item.id, item]));
-        data.surveys.forEach(item => { existingMap.set(item.id, { ...item, status: 'SYNCED' }); });
-        const merged = Array.from(existingMap.values());
-        merged.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-        await saveEntries(merged);
-        await render();
+  // 2. Tự động chuyển sang Direct Cloud Storage nếu chạy trên trang web tĩnh
+  if (!cloudSurveys) {
+    try {
+      const res = await fetch(CLOUD_FALLBACK_URL);
+      let existingRemote = [];
+      if (res.ok) {
+        const remoteObj = await res.json();
+        if (remoteObj.data && Array.isArray(remoteObj.data.surveys)) {
+          existingRemote = remoteObj.data.surveys;
+        }
       }
+
+      const map = new Map(existingRemote.map(item => [item.id, { ...item, status: 'SYNCED' }]));
+      localSurveys.forEach(item => {
+        map.set(item.id, { ...item, status: 'SYNCED' });
+      });
+
+      const merged = Array.from(map.values());
+      merged.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+      await fetch(CLOUD_FALLBACK_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'VKU Field Surveys', data: { surveys: merged } })
+      });
+
+      cloudSurveys = merged;
+    } catch (e) {
+      console.warn('Lỗi kết nối Cloud Storage:', e);
     }
-  } catch (e) {
-    console.warn('GET /api/surveys fallback error:', e);
   }
 
+  if (cloudSurveys) {
+    await saveEntries(cloudSurveys);
+    await render();
+    $('#syncButton').textContent = 'Đồng bộ ngay';
+    notify(`Đã đồng bộ thành công! (${cloudSurveys.length} phiếu trên Cloud)`);
+    return;
+  }
+
+  // 3. Giả lập ngoại tuyến nếu không kết nối được server nào
   if (!waiting.length) {
     $('#syncButton').textContent = 'Đồng bộ ngay';
     return;
