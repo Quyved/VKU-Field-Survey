@@ -32,7 +32,11 @@ Mở Android Studio để tạo APK. Quyền camera sẽ được trình duyệt
 - Manifest PWA, giao diện responsive và Service Worker cache-first.
 - Form nhiều trường, đánh giá 1–5 sao và ảnh minh chứng từ camera.
 - Tự động lưu nháp bằng IndexedDB; phiếu khảo sát được lưu cục bộ khi offline.
-- Hàng đợi `PENDING_SYNC`, theo dõi trạng thái mạng và đồng bộ mô phỏng tuần tự.
+- Đồng bộ cloud thật qua Cloudflare Pages Function: phiếu được gộp theo UUID và `updatedAt`, vì vậy tạo trên điện thoại sẽ xuất hiện trên máy tính (và ngược lại) sau tối đa 15 giây hoặc ngay khi bấm **Đồng bộ ngay**.
 - Danh sách phiếu đã tạo và xuất dữ liệu JSON.
 
-> Phiên bản demo lưu dữ liệu trên thiết bị và mô phỏng server. Để triển khai thật, thay hàm `sync()` trong `app.js` bằng API backend; ứng dụng đã có mô hình hàng đợi sẵn sàng để thay thế.
+## Đồng bộ nhiều thiết bị
+
+Khi triển khai bằng Cloudflare Pages, các endpoint trong `functions/api/` tự hoạt động. Ứng dụng ưu tiên Cloudflare KV với binding tên `SURVEYS_KV`; nếu binding này chưa được tạo, Function dùng kho cloud dự phòng để demo vẫn đồng bộ được.
+
+Để dùng KV riêng của bạn (khuyến nghị): tạo một KV Namespace trong Cloudflare, sau đó vào **Pages → VKU Field Survey → Settings → Functions → KV namespace bindings**, thêm binding `SURVEYS_KV`. Sau lần deploy tiếp theo, mọi điện thoại/máy tính cùng truy cập URL Pages sẽ đồng bộ với kho riêng đó.

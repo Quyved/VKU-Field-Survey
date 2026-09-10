@@ -1,6 +1,21 @@
 // Cloudflare Pages Function cho GET /api/surveys và POST /api/surveys
 const CLOUD_SYNC_URL = 'https://api.restful-api.dev/objects/ff808181a067127101a08a5a4dda6221';
 
+function mergeSurveys(...lists) {
+  const map = new Map();
+  lists.flat().filter(item => item && item.id).forEach(item => {
+    const next = {
+      ...item,
+      status: 'SYNCED',
+      createdAt: item.createdAt || new Date().toISOString(),
+      updatedAt: item.updatedAt || item.createdAt || new Date().toISOString()
+    };
+    const current = map.get(next.id);
+    if (!current || new Date(next.updatedAt).getTime() >= new Date(current.updatedAt).getTime()) map.set(next.id, next);
+  });
+  return Array.from(map.values()).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
 async function getCloudSurveys(context) {
   if (context.env && context.env.SURVEYS_KV) {
     try {
@@ -61,21 +76,9 @@ export async function onRequestPost(context) {
     const payload = await context.request.json();
     const incomingSurveys = Array.isArray(payload) ? payload : (payload.surveys || []);
 
-    let existingSurveys = await getCloudSurveys(context);
-    const existingMap = new Map(existingSurveys.map(item => [item.id, item]));
-    let syncedCount = 0;
-
-    incomingSurveys.forEach(item => {
-      if (!item.id) return;
-      const updatedItem = { ...item, status: 'SYNCED' };
-      if (!existingMap.has(item.id) || existingMap.get(item.id).status !== 'SYNCED') {
-        existingMap.set(item.id, updatedItem);
-        syncedCount++;
-      }
-    });
-
-    const mergedSurveys = Array.from(existingMap.values());
-    mergedSurveys.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    const existingSurveys = await getCloudSurveys(context);
+    const mergedSurveys = mergeSurveys(existingSurveys, incomingSurveys);
+    const syncedCount = mergedSurveys.length;
 
     await saveCloudSurveys(context, mergedSurveys);
 

@@ -1,5 +1,4 @@
 const KEY='vku-surveys-v1', DRAFT='vku-draft-v1';
-const CLOUD_FALLBACK_URL = 'https://api.restful-api.dev/objects/ff808181a067127101a08a5a4dda6221';
 let rating=0, photoData='';
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
 const form=$('#surveyForm'), toast=$('#toast');
@@ -105,87 +104,62 @@ function esc(value){
 }
 
 let isSyncing = false;
+
+function normalizedSurvey(item, status = 'SYNCED') {
+  return {
+    ...item,
+    status,
+    createdAt: item.createdAt || new Date().toISOString(),
+    updatedAt: item.updatedAt || item.createdAt || new Date().toISOString()
+  };
+}
+
+// Một phiếu có UUID cố định. Nếu cùng UUID xuất hiện ở hai thiết bị, bản sửa mới hơn thắng.
+function mergeSurveys(...lists) {
+  const map = new Map();
+  lists.flat().filter(item => item && item.id).forEach(item => {
+    const next = normalizedSurvey(item, item.status || 'SYNCED');
+    const current = map.get(next.id);
+    if (!current || new Date(next.updatedAt).getTime() >= new Date(current.updatedAt).getTime()) {
+      map.set(next.id, next);
+    }
+  });
+  return Array.from(map.values())
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
 async function sync(silent = false){
   if(!isOnline() || isSyncing) return;
   isSyncing = true;
   const localSurveys = await entries();
-  const waiting = localSurveys.filter(x => x.status === 'PENDING_SYNC');
-  
   if (!silent) $('#syncButton').textContent = 'Đang đồng bộ…';
 
-  let cloudSurveys = null;
-
   try {
+    // Luôn lấy dữ liệu cloud trước để không làm mất phiếu được tạo trên điện thoại khác.
+    const pull = await fetch('/api/surveys', { cache: 'no-store' });
+    const remotePayload = pull.ok ? await pull.json() : { surveys: [] };
+    const merged = mergeSurveys(remotePayload.surveys || [], localSurveys)
+      .map(item => normalizedSurvey(item, 'SYNCED'));
+
     const response = await fetch('/api/surveys/sync', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(localSurveys)
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+      body: JSON.stringify({ surveys: merged })
     });
-    
-    if (response.ok) {
-      const resData = await response.json();
-      if (resData.success && Array.isArray(resData.surveys) && resData.surveys.length > 0) {
-        cloudSurveys = resData.surveys;
-      }
-    }
-  } catch (err) {
-    console.warn('API /api/surveys/sync không phản hồi:', err);
-  }
-
-  if (!cloudSurveys) {
-    try {
-      const res = await fetch(CLOUD_FALLBACK_URL);
-      let existingRemote = [];
-      if (res.ok) {
-        const remoteObj = await res.json();
-        if (remoteObj.data && Array.isArray(remoteObj.data.surveys)) {
-          existingRemote = remoteObj.data.surveys;
-        }
-      }
-
-      const map = new Map(existingRemote.map(item => [item.id, { ...item, status: 'SYNCED' }]));
-      localSurveys.forEach(item => {
-        map.set(item.id, { ...item, status: 'SYNCED' });
-      });
-
-      const merged = Array.from(map.values());
-      merged.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-
-      if (waiting.length > 0 || merged.length !== existingRemote.length) {
-        await fetch(CLOUD_FALLBACK_URL, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: 'VKU Field Surveys', data: { surveys: merged } })
-        });
-      }
-
-      cloudSurveys = merged;
-    } catch (e) {
-      console.warn('Lỗi kết nối Cloud Storage:', e);
-    }
-  }
-
-  if (cloudSurveys) {
-    await saveEntries(cloudSurveys);
+    if (!response.ok) throw new Error(`Máy chủ phản hồi ${response.status}`);
+    const result = await response.json();
+    if (!result.success || !Array.isArray(result.surveys)) throw new Error('Dữ liệu đồng bộ không hợp lệ');
+    await saveEntries(mergeSurveys(result.surveys).map(item => normalizedSurvey(item, 'SYNCED')));
     await render();
     $('#syncButton').textContent = 'Đồng bộ ngay';
-    if (!silent) notify(`Đã đồng bộ thành công! (${cloudSurveys.length} phiếu trên Cloud)`);
-    isSyncing = false;
-    return;
-  }
-
-  if (!waiting.length) {
+    if (!silent) notify(`Đã đồng bộ ${result.surveys.length} phiếu giữa các thiết bị.`);
+  } catch (err) {
+    console.warn('Không thể đồng bộ cloud:', err);
+    if (!silent) notify('Chưa thể kết nối máy chủ. Phiếu vẫn an toàn trên thiết bị.');
+  } finally {
     $('#syncButton').textContent = 'Đồng bộ ngay';
     isSyncing = false;
-    return;
   }
-  await new Promise(r => setTimeout(r, 650));
-  localSurveys.forEach(x => { if (x.status === 'PENDING_SYNC') x.status = 'SYNCED'; });
-  await saveEntries(localSurveys);
-  await render();
-  $('#syncButton').textContent = 'Đồng bộ ngay';
-  if (!silent) notify(`Đã đồng bộ cục bộ ${waiting.length} phiếu.`);
-  isSyncing = false;
 }
 
 function initQrModal(){
@@ -238,7 +212,8 @@ $('#photoInput').addEventListener('change',e=>{
 form.addEventListener('submit',async e=>{
   e.preventDefault();
   if(!rating)return notify('Vui lòng chọn mức đánh giá tình trạng.');
-  const item={...getData(),rating,photoData,id:crypto.randomUUID(),createdAt:new Date().toISOString(),status:'PENDING_SYNC'};
+  const now=new Date().toISOString();
+  const item={...getData(),rating,photoData,id:crypto.randomUUID(),createdAt:now,updatedAt:now,status:'PENDING_SYNC'};
   const data=await entries();
   data.unshift(item);
   await saveEntries(data);
@@ -314,6 +289,8 @@ $$('.tab').forEach(b=>b.addEventListener('click',()=>{
 
 window.addEventListener('online',updateStatus);
 window.addEventListener('offline',updateStatus);
+window.addEventListener('focus',()=>sync(true));
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') sync(true); });
 if('serviceWorker'in navigator) navigator.serviceWorker.register('sw.js');
 
 loadDraft();
@@ -321,9 +298,9 @@ render();
 updateStatus();
 initQrModal();
 
-// Tự động kiểm tra và đồng bộ thời gian thực mỗi 4 giây
+// Giữ các điện thoại/máy tính đã mở cập nhật gần như tức thì mà không spam API.
 setInterval(() => {
   if (isOnline()) {
     sync(true);
   }
-}, 4000);
+}, 15000);
